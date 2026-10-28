@@ -12,3 +12,6 @@ desktop.ini
 # 编辑器
 .vscode/
 .idea/
+_chk/*.txt
+_chk/*.log
+_chk/*.png

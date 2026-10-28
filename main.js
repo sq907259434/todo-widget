@@ -203,8 +203,14 @@ function createWindow() {
     while (motion.length && now - motion[0] > 260) motion.shift();
     if (motion.length < 2) return;
     if (!w.__lookOn) setLook(true);
+    /* 兜底灭灯只兜"彻底停了"的情况：整整 1.2 秒没有任何一跳才关灯。
+       真正的拖动结束由 moved 事件宣布（见下面 moved 处理器）。
+       原来这里只等 320ms —— 用户慢慢把卡片往目标位置摆的时候（尤其贴着
+       磨砂的天气卡），移动事件会断档超过 320ms，灯被灭掉又点亮，
+       背景框就一闪一闪。中键路径没有这个超时（页面按住按钮期间一直亮），
+       所以用户实测中键从不闪、左键闪，差别就在这里。 */
     clearTimeout(lookTimer);
-    lookTimer = setTimeout(() => { motion = []; setLook(false); }, 320);
+    lookTimer = setTimeout(() => { motion = []; setLook(false); }, 1200);
   };
   w.on("will-move", (_e, nb) => {
     if (w.__autoY != null && Math.round(nb.y) === w.__autoY) return;
@@ -230,6 +236,11 @@ function createWindow() {
        setBounds 触发的 moved 在 Windows 上可能晚到，靠计时器复位容易漏判。 */
     const b = w.getBounds();
     if (w.__autoY != null && b.y === w.__autoY) return;
+    /* 用户松手，原生拖动结束 —— 这里才是关灯的权威信号。
+       moved 只在用户拖动结束时来一次（中键路径的 setPosition 不触发它，
+       中键的关灯由页面在 dragEnd 自己处理），所以在这里关灯不会误伤。
+       拖动途中移动事件再怎么断档，灯也只认 moved，不再靠超时兜底灭掉。 */
+    if (w.__lookOn) setLook(false);
     w.__autoY = null;
     w.__rowsY = b.y + w.__pad + (w.__top || 0);   /* 锚点跟着用户整体平移 */
     clearTimeout(moveTimer);
