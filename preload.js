@@ -7,9 +7,6 @@ contextBridge.exposeInMainWorld("wgt", {
   acrylic: ACRYLIC,
   close: () => ipcRenderer.send("wgt:close"),
   menu: () => ipcRenderer.send("wgt:menu"),
-  /* 鼠标指上来时临时浮到最前，移开还原（临时状态，不写存档） */
-  raise: () => ipcRenderer.send("wgt:raise"),
-  rest: () => ipcRenderer.send("wgt:rest"),
   /* 系统光标是否还在窗口矩形内（主进程按 90ms 轮询，只在变化时推）。
      页面自己的 mouseleave 在窗口重排时会误报，收起这件事以这条为准。 */
   onCursor: (fn) => ipcRenderer.on("wgt:cursor", (_e, p) => fn(p || {})),

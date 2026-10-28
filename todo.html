@@ -764,13 +764,15 @@ const cardEl = $("card");
    收起这张卡只有一个理由：光标真的不在窗口里了。
 
    页面自己的 mouseleave 不够格当这个理由 —— 展开时窗口自己往上长 63px、
-   高度 +77px，Chromium 会按旧坐标重新命中一次，偶尔甩一个假的 mouseleave。
-   假离开不只是闪一下：它会连带把"临时置顶"撤掉，卡片沉到别的窗口后面，
+   高度 +77px，Chromium 会按旧坐标重新命中一次，偶尔甩一个假的 mouseleave，
    看起来就是"鼠标明明还在框里，它自己隐藏了"。
 
    所以主进程每 90ms 用系统光标跟窗口矩形比一次，只在变化时推 wgt:cursor。
    sysInside 只有拿到真实值才生效；拿不到（老版本 preload / 页面测试桩）时保持
-   老的 :hover 判定，不能因为"不知道"就把卡片永远钉住。 */
+   老的 :hover 判定，不能因为"不知道"就把卡片永远钉住。
+   注意这套判断是纯几何的（光标坐标 vs 窗口矩形，不看遮挡）：卡片被别的窗口
+   压住时鼠标扫过也会判"进入"，所以这里只用来展开/收起，绝不拿来做
+   "抬升到最前" —— 那个行为已在 v1.0.3 按用户要求移除。 */
 let sysInside = null;        /* null = 还不知道，按老规矩来 */
 let leaveTimer = null, collapseTimer = null;
 
@@ -778,10 +780,10 @@ function enterFrame() {
   clearTimeout(leaveTimer);
   clearTimeout(collapseTimer);
   hovering = true;
-  /* 鼠标指上来就浮到最前：两张卡各是一个窗口，谁在上由系统决定。天气卡被拖到
-     这张上面时，这张会被压住 —— 以前只有"点一下"（窗口被激活）才浮上来。
-     抬升是临时的，移开就还原，不动用户自己设的"窗口置顶"。 */
-  if (window.wgt && window.wgt.raise) window.wgt.raise();
+  /* 不做"悬停抬升"了：watchCursor 是纯几何判断，卡片被别的窗口压住时
+     鼠标扫过那块区域也会被判成"进入"，卡片会自己跳到最前面打断人 —— 用户实测很烦。
+     现在卡片安分待在自己的层里；被压住想唤回来，走右键菜单"显示待办卡片"
+     （second-instance 会把窗口提到最前）。 */
   if (applyFull()) syncHeight(true);
 }
 
@@ -802,7 +804,6 @@ function leaveFrame() {
     if (sysInside === true) return;      /* 光标还在窗口里 —— 这声 leave 是假的 */
     if (cardEl.matches(":hover")) return;
     hovering = false;
-    if (window.wgt && window.wgt.rest) window.wgt.rest();
     if (applyFull()) syncHeight(true);
   }, 120);
 }

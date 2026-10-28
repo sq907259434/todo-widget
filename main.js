@@ -384,20 +384,7 @@ app.whenReady().then(() => {
     const w = senderWin(e);
     if (!w) return;
     const m = await buildMenu();
-    /* 菜单弹出时卡片会失焦、鼠标也离开页面。标记一下，免得这时候被"还原到后面"，
-       结果菜单还开着、卡片已经被别的窗口盖住。 */
-    w.__menuOpen = true;
-    w.__restPending = false;
-    m.popup({
-      window: w,
-      callback: () => {
-        if (w.isDestroyed()) return;
-        w.__menuOpen = false;
-        if (!w.__restPending) return;
-        w.__restPending = false;
-        w.setAlwaysOnTop(readCardState().top === true, "floating");
-      },
-    });
+    m.popup({ window: w });
   });
 
   ipcMain.handle("wgt:get-top", () => readCardState().top === true);
@@ -409,28 +396,12 @@ app.whenReady().then(() => {
     return !!v;
   });
 
-  /* ---------- 鼠标指上来就临时浮到最前 ----------
-     用户把别的窗口压到待办卡上，按"点一下"才浮上来太迟钝；
-     hover 即抬升、移开即还原 —— 都是临时的，不写进存档，
-     用户自己在菜单里设的"窗口置顶"不能被它改掉。 */
-  ipcMain.on("wgt:raise", (e) => {
-    const w = senderWin(e);
-    if (!w || w.isDestroyed()) return;
-    w.__hoverTop = true;
-    if (!w.isAlwaysOnTop()) w.setAlwaysOnTop(true, "floating");
-    /* ★ 只打上"置顶"这个样式并不会改变它在置顶层里的前后位置：
-       其他窗口本来就是置顶的时候，光 setAlwaysOnTop 翻不上去 —— 实测 z 序一点没变。
-       必须再主动提一次。 */
-    w.moveTop();
-  });
-
-  ipcMain.on("wgt:rest", (e) => {
-    const w = senderWin(e);
-    if (!w || w.isDestroyed()) return;
-    w.__hoverTop = false;
-    if (w.__menuOpen) { w.__restPending = true; return; }   /* 菜单还开着，等它关了再沉 */
-    w.setAlwaysOnTop(readCardState().top === true, "floating");
-  });
+  /* ---------- 鼠标指上来就临时浮到最前（已移除，v1.0.3） ----------
+     以前这里有个 hover 抬升：鼠标进窗口矩形就把卡片提到最前、移开还原。
+     但 watchCursor 是纯几何判断（光标坐标 vs 窗口矩形，不看遮挡），
+     卡片被别的窗口整个压住时，鼠标扫过那块屏幕区域也会被判"进入"，
+     卡片就自己跳出来打断人 —— 用户实测很烦，按要求移除。
+     被压住想唤回：右键桌面 →"显示待办卡片"（second-instance 提到最前）。 */
 
   /* 左键抓顶栏是系统原生 caption 拖动，主进程不插手；但中键够不着那条 22px
      的标题栏（drag region 不派发 DOM 事件给中键），所以中键这条路改由页面算
