@@ -732,7 +732,7 @@ function renderList() {
       const gone = h.kind === "del";
       html += '<div class="hrow ' + (gone ? "gone" : "ok") + '" data-hid="' + h.id + '">' +
         '<span class="hi">' + (gone ? ICON_TRASH : ICON_CHECK) + '</span>' +
-        '<span class="htxt">' + esc(h.text) + '</span>' +
+        '<span class="htxt" title="' + esc(h.text) + '">' + esc(h.text) + '</span>' +
         '<span class="htm">' + hhmm(h.at) + '</span>' +
         '<button class="rest" data-act="restore" title="放回待办">' + ICON_BACK + '</button>' +
       '</div>';
@@ -755,7 +755,7 @@ function renderList() {
     /* 双击进来的那一条换成输入框；其余照常。input 走浏览器原生输入法/撤销/选区 */
     const body = editId === t.id
       ? '<input class="etxt" data-id="' + t.id + '" value="' + esc(t.text) + '" spellcheck="false" maxlength="80">'
-      : '<span class="txt">' + esc(t.text) + '</span>';
+      : '<span class="txt" title="' + esc(t.text) + '">' + esc(t.text) + '</span>';
     html += '<div class="row" data-id="' + t.id + '">' +
       '<div class="hint">' + ICON_TRASH + '<span>松手删除</span></div>' +
       '<div class="item' + (t.done ? " done" : "") + (editId === t.id ? " editing" : "") + '" data-id="' + t.id + '">' +
