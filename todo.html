@@ -577,7 +577,7 @@
   </div>
 
   <div class="add" id="addBar">
-    <input id="inp" type="text" placeholder="写点什么，回车添加" autocomplete="off" spellcheck="false" maxlength="80">
+    <input id="inp" type="text" placeholder="写点什么，移开就记下" autocomplete="off" spellcheck="false" maxlength="80">
     <button class="btn-add" id="addBtn" title="添加" disabled>
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round">
         <path d="M12 5.5v13M5.5 12h13"/>
@@ -594,6 +594,29 @@
 </div>
 
 <script>
+/* ================= preload 缺失时的兜底 =================
+   window.wgt 由 preload 注入。万一它没加载（asar/路径出问题，或者直接在浏览器里
+   打开这个文件调试），下面任何一句 window.wgt.xxx 都会抛错 —— 整个脚本直接死掉，
+   卡片退化成静态 HTML：数据不渲染、所有手势失效，而且看不出是哪坏了。
+   这里补一层空实现，最差也只是"变成一张普通网页卡片"。 */
+if (!window.wgt) {
+  const noop = () => {};
+  const on = () => noop;
+  window.wgt = {
+    acrylic: false,
+    close: noop, menu: noop, dragBegin: noop, dragMove: noop, dragEnd: noop,
+    setRegion: noop, imeBegin: noop, imeEnd: noop,
+    setCardHeight: () => Promise.resolve(true),
+    backdropNow: () => Promise.resolve(null),
+    getLook: () => Promise.resolve(null),
+    setLook: () => Promise.resolve(true),
+    onCursor: on, onDragLook: on, onFocusInput: on, onClearDone: on,
+    onShowHistory: on, onShowLook: on, onSetFullmode: on, onBackdrop: on,
+    onBdFull: on, onBdPos: on, onBdDragEnd: on,
+    onImeText: on, onImeCommit: on, onImeCancel: on, onImeBlur: on,
+  };
+}
+
 /* ================= 数据 ================= */
 const STORE = "todo_v1";          /* 待办本身，沿用旧键，不破坏已有数据 */
 const HSTORE = "todo_hist_v1";    /* 历史记录，独立键 */
@@ -655,6 +678,26 @@ function pushHist(text, kind) {
    保证光标、选区、撤销都由浏览器自己管，不用手搓。 */
 let editId = null;
 let clearArm = 0;      /* "清空全部历史"的两段确认时间戳（0 = 未armed） */
+
+/* ---------- 首用引导 ----------
+   第一次用的人不知道卡片有哪些手势（悬停展开 / 右滑删除 / 双击改字），
+   在页脚放一行小字，看 6 秒或者一动手就撤，之后不再出现。 */
+const HINT_KEY = "todo_hint_v1";
+let hintSeen = false, hintTimer = null;
+try { hintSeen = localStorage.getItem(HINT_KEY) === "1"; } catch (e) {}
+
+function markHintSeen() {
+  if (hintSeen) return;
+  hintSeen = true;
+  try { localStorage.setItem(HINT_KEY, "1"); } catch (e) {}
+  clearTimeout(hintTimer);
+  hintTimer = null;
+  renderMeta();
+}
+function armHint() {
+  if (hintSeen || hintTimer) return;
+  hintTimer = setTimeout(markHintSeen, 6000);
+}
 
 function renderList() {
   const rows = $("rows");
@@ -738,9 +781,16 @@ function renderMeta() {
     : (look ? "外观"
       : (items.length ? (undone > 0 ? String(undone) : "全部完成") : ""));
 
+  /* 页脚左槽：待办视图下先给第一次用的人看一遍手势提示（6 秒或一动手就撤），
+     之后换回统计。原来这里写"回车添加"，但实际是"失焦/移开鼠标就提交"，
+     文案和行为对不上（用户会以为必须按回车）。 */
+  const hinting = !hintSeen && !hist && !look && items.length > 0;
   $("ftL").textContent = hist
     ? (state.hist.length ? "共 " + state.hist.length + " 条记录" : "历史记录")
-    : (look ? "拖动滑杆即时生效" : (items.length ? "共 " + items.length + " 项 · 已完成 " + done : "回车添加"));
+    : (look ? "拖动滑杆即时生效"
+      : (hinting ? "悬停展开 · 右滑删除 · 双击改字"
+        : (items.length ? "共 " + items.length + " 项 · 已完成 " + done : "移开鼠标就自动记下")));
+  if (hinting) armHint();
 
   /* 页脚右侧：非待办视图统一是"返回"。清空历史挪到列表末尾（见 renderList），
      免得"学过一次点这里收起"的人在这里一键清空历史。 */
@@ -749,6 +799,9 @@ function renderMeta() {
   if (hist || look) {
     r.textContent = "← 返回待办";
     r.className = "link";
+  } else if (hinting) {
+    r.textContent = "";          /* 左边已经在教手势了，右边别重复 */
+    r.className = "tip";
   } else {
     r.textContent = "按住往右滑删除";
     r.className = "tip";
@@ -1110,6 +1163,7 @@ let swipeCollapsed = false;
 
 function swipeLook(on) {
   if (swipeCollapsed === on) return;
+  if (on) markHintSeen();          /* 已经会用右滑了，别再教 */
   if (document.body.classList.contains("fullmode")) return;   /* 完全体不动 */
   swipeCollapsed = on;
   lookDrag = on;
@@ -1533,6 +1587,7 @@ const list = $("list");
 
 function beginEdit(id) {
   if (state.view !== "todo") return false;
+  markHintSeen();                  /* 已经会用双击了 */
   if (!state.items.some((x) => x.id === id)) return false;
   if (editId === id) return false;
   editId = id;
