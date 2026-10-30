@@ -269,6 +269,14 @@
     text-decoration-color:rgba(255,255,255,.30);
   }
 
+  /* 上下拖动排序：被拖的那条抬起来，其它行带过渡让位 */
+  .row{ transition:transform .15s cubic-bezier(.2,.8,.3,1); }
+  .row.moving{ z-index:6; transition:none; }
+  .row.moving .item{
+    box-shadow:0 8px 20px rgba(0,0,0,.38), inset 0 0 0 1px rgba(255,255,255,.24);
+    cursor:grabbing;
+  }
+
   /* 悬停才出现的删除按钮（替代原来那个小箭头，顺手告诉用户"这里能删"） */
   .del{
     flex:0 0 auto; width:20px; height:20px; margin-right:-2px; padding:0;
@@ -1636,6 +1644,49 @@ list.addEventListener("blur", (e) => {
   endEdit(true, el);
 }, true);
 
+/* ================= 交互：上下拖动排序 =================
+   行内纵向拖动以前什么都不做（只认右滑），正好拿来做手动排序：
+   按住任意一条上下拖，被拖的那条跟着光标走，其它行让位；松手落定。
+   只动视觉，松手才改数据 —— 拖动过程中不重排 DOM，否则元素被重建、手势断掉。 */
+function startReorder(d) {
+  if (state.view !== "todo") return;
+  d.mode = "reorder";
+  d.rows = Array.prototype.slice.call(list.querySelectorAll("#rows .row"));
+  d.from = d.rows.indexOf(d.row);
+  if (d.from < 0) { d.mode = "pending"; return; }
+  const a = d.rows[0].getBoundingClientRect();
+  const b = d.rows[1] && d.rows[1].getBoundingClientRect();
+  d.rowH = b ? Math.round(b.top - a.top) : Math.round(a.height) + 3;
+  d.to = d.from;
+  d.row.classList.add("moving");
+  d.item.classList.add("dragging");
+}
+
+function moveReorder(d, e) {
+  const dy = e.clientY - d.startY;
+  const steps = Math.round(dy / (d.rowH || 33));
+  const to = Math.max(0, Math.min(d.rows.length - 1, d.from + steps));
+  d.to = to;
+  d.row.style.transform = "translateY(" + dy + "px)";
+  d.rows.forEach((r, i) => {
+    if (r === d.row) return;
+    if (to > d.from && i > d.from && i <= to) r.style.transform = "translateY(" + (-d.rowH) + "px)";
+    else if (to < d.from && i >= to && i < d.from) r.style.transform = "translateY(" + d.rowH + "px)";
+    else r.style.transform = "";
+  });
+}
+
+function endReorder(d) {
+  d.rows.forEach((r) => { r.style.transform = ""; r.style.zIndex = ""; });
+  d.row.classList.remove("moving");
+  d.item.classList.remove("dragging");
+  if (d.to == null || d.to === d.from) return;
+  const moved = state.items.splice(d.from, 1)[0];
+  state.items.splice(d.to, 0, moved);
+  save();
+  render();
+}
+
 /* ================= 交互：完成 / 删除 / 右滑删除 =================
    条目只做三件事：单击勾选、双击改字、按住往右滑删除。
    挪窗口不在这里 —— 顶栏是标题栏（-webkit-app-region: drag），
@@ -1676,7 +1727,8 @@ list.addEventListener("mousedown", (e) => {
     row: item.parentElement,
     id: item.dataset.id,
     startX: e.clientX,
-    mode: "pending",          /* pending | swipe */
+    startY: e.clientY,
+    mode: "pending",          /* pending | swipe | reorder */
     dx: 0,
     moved: false,
   };
@@ -1689,9 +1741,18 @@ window.addEventListener("mousemove", (e) => {
 
   if (drag.mode === "pending") {
     const dx0 = e.clientX - drag.startX;
-    if (dx0 > 6) { drag.mode = "swipe"; swipeLook(true); }   /* 只认右滑；竖向拖动不再牵动窗口 */
-    else return;
+    const dy0 = e.clientY - drag.startY;
+    /* 先判方向：横向往右 = 右滑删除；纵向 = 上下拖动排序。
+       两轴都过阈值时看谁占优，避免斜着拖的时候乱跳模式。 */
+    if (dx0 > 6 && Math.abs(dx0) >= Math.abs(dy0)) {
+      drag.mode = "swipe";
+      swipeLook(true);
+    } else if (Math.abs(dy0) > 6) {
+      startReorder(drag);
+    } else return;
   }
+
+  if (drag.mode === "reorder") { moveReorder(drag, e); return; }
 
   /* ---------- 右滑删除 ---------- */
   const dx = e.clientX - drag.startX;
@@ -1719,6 +1780,8 @@ window.addEventListener("mouseup", () => {
   swipeLook(false);
 
   d.item.classList.remove("dragging");
+
+  if (d.mode === "reorder") { endReorder(d); return; }
 
   if (!d.moved) {                     /* 只是点了一下，交给 click 处理 */
     d.item.style.transform = "";
