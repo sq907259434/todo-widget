@@ -1,7 +1,7 @@
 {
   "name": "todo-card",
   "productName": "TodoCard",
-  "version": "1.0.5",
+  "version": "1.0.26",
   "description": "待办清单 —— 桌面待办小卡，鼠标碰到展开，平时只剩条目（Electron 独立版）",
   "author": {
     "name": "WeatherWidget Contributors"
@@ -30,8 +30,12 @@
     },
     "files": [
       "main.js",
+      "desktop-layer.js",
+      "backdrop.js",
       "preload.js",
       "todo.html",
+      "ime.html",
+      "ime-preload.js",
       "icon.png",
       "package.json"
     ],
