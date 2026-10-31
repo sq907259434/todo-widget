@@ -82,7 +82,12 @@ function fgIsDesktop() {
 const wallpaperFile = () =>
   path.join(app.getPath("appData"), "Microsoft", "Windows", "Themes", "TranscodedWallpaper");
 function wallpaperStamp() {
-  try { const s = fs.statSync(wallpaperFile()); return s.mtimeMs || 0; } catch (e) { return 0; }
+  /* 修改时间 + 大小：Windows 换壁纸会重写 TranscodedWallpaper，
+     两个值一起比，比只看 mtime 更稳（同一张图重新应用也能识别）。 */
+  try {
+    const s = fs.statSync(wallpaperFile());
+    return (s.mtimeMs || 0) + ":" + (s.size || 0);
+  } catch (e) { return 0; }
 }
 
 function refreshSnapshot(reason) {
@@ -143,8 +148,8 @@ function startDesktopWatch() {
     const s = wallpaperStamp();
     if (!s || s === _wpStamp) return;
     _wpStamp = s;
-    scheduleSnapshot(600, "wallpaper");
-  }, 5000);
+    scheduleSnapshot(500, "wallpaper");
+  }, 2000);
 
   /* 分辨率 / 缩放变了：快照尺寸对不上，必须重抓 */
   try { screen.on("display-metrics-changed", () => scheduleSnapshot(800, "metrics")); } catch (e) {}
@@ -834,7 +839,8 @@ function createWindow() {
      所以想让卡片同等待遇，唯一办法是把自己 SetParent 进 Progman（见 desktop-layer.js）。
      挂上之后不需要任何轮询判断「现在是不是显示桌面」，下面那段智能置顶会整体让位。 */
   const dl = createDesktopLayer({ getWin: () => w, log: evlogSafe });
-  if (dl.available && readCardState().desktopLayer === true) {
+  /* 勾了「窗口置顶」就不进桌面层（子窗口 setAlwaysOnTop 无效，两者互斥） */
+  if (dl.available && readCardState().desktopLayer === true && readCardState().top !== true) {
     w.once("show", () => setTimeout(() => {
       if (readCardState().desktopLayer !== true) return;
       dl.set(true).then((ok) => evlogSafe("dlayer startup " + ok));
@@ -1121,14 +1127,22 @@ async function buildMenu() {
       click: (item) => { toggleDesktopLayer(item.checked); },
     },
     {
-      label: "窗口置顶",
+      label: "窗口置顶（会脱离桌面层）",
       type: "checkbox",
       checked: onTop,
       click: (item) => {
-        patchCardState({ top: item.checked });
-        if (win && !win.isDestroyed()) {
-          win.setAlwaysOnTop(item.checked, "floating");
+        const on = !!item.checked;
+        /* 贴进桌面层时是 Progman 的子窗口，setAlwaysOnTop 对子窗口无效 ——
+           想真浮到最前必须先脱离桌面层。本卡的层级只在启动时建立，
+           所以改完状态直接重启（和「贴进桌面」同一个路子，最干净）。 */
+        if (on && readCardState().desktopLayer === true) {
+          patchCardState({ top: true, desktopLayer: false });
+          app.relaunch();
+          app.exit(0);
+          return;
         }
+        patchCardState({ top: on });
+        if (win && !win.isDestroyed()) win.setAlwaysOnTop(on, "floating");
       },
     },
     { type: "separator" },
