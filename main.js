@@ -1269,11 +1269,6 @@ app.whenReady().then(() => {
     w.__dragTimer = setTimeout(() => { if (!w.isDestroyed()) w.__dragFrom = null; }, 1200);
   });
 
-  ipcMain.on("wgt:dbg", (e, m) => {
-    try { fs.appendFileSync(path.join(app.getPath("userData"), "win-events.log"),
-      new Date().toISOString() + " PG " + m + "\n"); } catch (er) {}
-  });
-
   ipcMain.on("wgt:drag-end", (e) => {
     const w = senderWin(e);
     if (!w || w.isDestroyed()) return;
@@ -1359,12 +1354,6 @@ app.whenReady().then(() => {
        基准跟窗口一起走，画面才连续。 */
     if (w.__drag && y !== b.y) w.__drag.oy += (y - b.y);
 
-    try {
-      if (H !== b.height || y !== b.y) {
-        fs.appendFileSync(path.join(app.getPath("userData"), "win-events.log"),
-          new Date().toISOString() + ` CH h:${b.height}->${H} y:${b.y}->${y} rowsY=${Math.round(w.__rowsY)} top=${top} topMin=${topMin}\n`);
-      }
-    } catch (e) {}
     if (H === b.height && y === b.y) return true;
 
     w.__autoY = y;      /* 记下这次是我们自己改的 y，moved 事件据此放行 */
