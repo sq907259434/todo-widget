@@ -996,10 +996,13 @@ function wantFull() {
 }
 
 function applyFull() {
-  /* 拖动中必须当成"非展开"：完全体下 .full 一直挂着，卡片的渐变底（.tint）
-     不会被平时那条 :not(.full) 规则撤掉，窗口又被裁成只剩条目矩形 ——
-     渐变叠在条目玻璃底上就是用户看到的"黑条"。 */
-  const on = wantFull() && !document.body.classList.contains("dragging");
+  /* ★ 拖动期间**不再改 .full**。
+     旧逻辑拖动时摘皮肤（.hd/.add 变 display:none），布局瞬间少 63px，
+     窗口又锁着高度不让改 → 那 63px 全压给任务条，手一拖就"往上跳一截"。
+     用户的诉求很直接：任务条要跟鼠标保持相对位置 ——
+     那就别在拖动时动布局，什么高度/位置都不变，自然不跳。
+     代价：拖动时整张卡（含顶栏/输入框）跟着走，不再"只剩任务条"。 */
+  const on = wantFull();
   const card = $("card");
   if (card.classList.contains("full") === on) return false;
   card.classList.toggle("full", on);
