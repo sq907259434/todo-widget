@@ -45,6 +45,8 @@ contextBridge.exposeInMainWorld("wgt", {
   /* 外观设置：透明度 / 磨砂 */
   getLook: () => ipcRenderer.invoke("wgt:get-look"),
   setLook: (v) => ipcRenderer.invoke("wgt:set-look", v),
+  /* 真透明模式：页面据此关掉桌面快照层，让真实的背景透上来 */
+  onNoReg: (fn) => ipcRenderer.on("wgt:noreg", (_e, v) => fn(!!v)),
   onSetFullmode: (cb) => ipcRenderer.on("todo:set-fullmode", (e, v) => cb(v)),
   onShowLook: (fn) => ipcRenderer.on("todo:show-look", () => fn()),
   /* 桌面层输入桥：卡片是 Progman 子窗口拿不到键盘焦点，打字由主进程的

@@ -42,6 +42,16 @@
     opacity:0; transition:opacity .16s ease;
   }
   body.has-bd #bd{ opacity:1; }
+  /* 真透明模式：窗口不再裁剪区域，背景由系统真实混合 ——
+     这时再把桌面快照画上去，反而是"假背景"盖住了真背景，所以要关掉。 */
+  body.noreg #bd{ display:none; }
+  /* 真透明模式下磨砂滑杆是空转的：它模糊的是 #bd 快照，而快照已经不画了。
+     系统 acrylic 又要求窗口不透明，两者不可兼得 —— 直接把滑杆置灰。 */
+  body.noreg .lkrow.frost{ opacity:.35; pointer-events:none; }
+  body.noreg .lkrow.frost::after{
+    content:"真透明模式下不可用"; display:block; font-size:9px;
+    color:rgba(255,255,255,.4); margin-left:auto;
+  }
   /* 拖动中不藏快照：主进程在起拖时抓了一张"无卡片"的干净全屏快照，
      拖动中按新位置实时重裁推送（见 main.js dragBegin）。必须垫着它 ——
      窗口被 region 裁剪后，半透明像素合成不出透明度，一旦快照层缺席，
@@ -717,7 +727,7 @@ function renderList() {
         '<label class="lkrow"><span>透明度</span>' +
           '<input id="lkAlpha" type="range" min="8" max="94" step="1">' +
           '<b id="lkAlphaV"></b></label>' +
-        '<label class="lkrow"><span>磨砂</span>' +
+        '<label class="lkrow frost"><span>磨砂</span>' +
           '<input id="lkFrost" type="range" min="0" max="20" step="1">' +
           '<b id="lkFrostV"></b></label>' +
         '<label class="lkrow lkchk"><input id="lkFull" type="checkbox">' +
@@ -1423,6 +1433,10 @@ function bindLook() {
 function setBackdrop(p) {
   const bd = $("bd");
   if (!bd) return;
+  if (window.wgt && window.wgt.onNoReg) {
+    window.wgt.onNoReg((v) => document.body.classList.toggle("noreg", v));
+  }
+
   if (!p || !p.url) { document.body.classList.remove("has-bd"); return; }
   bd.style.left = p.left + "px";
   bd.style.top = p.top + "px";

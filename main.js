@@ -339,6 +339,7 @@ const _rgn = (() => {
     return {
       SetWindowRgn: u.func("SetWindowRgn", "int", ["void *", "void *", "bool"]),
       CreateRectRgn: g.func("CreateRectRgn", "void *", ["int", "int", "int", "int"]),
+      CreateRoundRectRgn: g.func("CreateRoundRectRgn", "void *", ["int", "int", "int", "int", "int", "int"]),
       CombineRgn: g.func("CombineRgn", "int", ["void *", "void *", "void *", "int"]),
       DeleteObject: g.func("DeleteObject", "bool", ["void *"]),
     };
@@ -348,6 +349,15 @@ const _rgn = (() => {
 /* 页面报来的是 CSS 像素（相对窗口客户区），这里换成物理像素再合并成一块 region。
    RGN_OR = 2。成功后 region 归系统所有，绝不能 DeleteObject。 */
 function applyRegion(w, list) {
+  /* 真透明模式：完全不要窗口区域。
+     代价是卡片矩形范围内都会挡住鼠标（行间空白也挡），
+     换来的是 Windows 肯把窗口像素和后面的应用窗口做透明混合 —— 真正的"透"。 */
+  if (readCardState().noRegion === true) {
+    try { _rgn.SetWindowRgn(hwndNum(w), null, true); } catch (e) {}
+    try { w.webContents.send("wgt:noreg", true); } catch (e) {}
+    return true;
+  }
+  try { w.webContents.send("wgt:noreg", false); } catch (e) {}
   if (!_rgn || !w || w.isDestroyed()) return false;
   const hwnd = hwndNum(w);
   if (!hwnd) return false;
@@ -375,7 +385,12 @@ function applyRegion(w, list) {
   let acc = null;
   for (const q of rects) {
     let one;
-    try { one = Number(_rgn.CreateRectRgn(q.l, q.t, q.r + 1, q.b + 1)); } catch (e) { continue; }
+    /* ★ 每一条是 9px 圆角的胶囊，区域却按直角矩形拼 —— 胶囊圆角外、
+       矩形内那一小块就露出来了（用户看到的"圆角处还有像素"）。
+       用圆角区域拼，边界才和胶囊完全一致。
+       注意 CreateRoundRectRgn 最后两个参数是椭圆的长宽，半径 = 值/2。 */
+    const rad2 = Math.max(2, Math.round(9 * scale)) * 2;
+    try { one = Number(_rgn.CreateRoundRectRgn(q.l, q.t, q.r + 1, q.b + 1, rad2, rad2)); } catch (e) { continue; }
     if (!one) continue;
     if (!acc) { acc = one; continue; }
     try { _rgn.CombineRgn(acc, acc, one, 2); } catch (e) {}
@@ -503,6 +518,10 @@ function dragStop(w, persist) {
     const b = w.getBounds();
     /* 收尾再校一次锚点：拖动最后一帧可能刚好没被 tick 覆盖到（按钮松开先于定时器） */
     w.__rowsY = b.y + (w.__pad || 0) + (w.__top || 0);
+    /* 刚松手时页面会从"完全体"收起：收起后首行在卡片里的偏移变了，
+       set-card-height 用旧锚点反推顶边，卡片就会往下跳一截（用户报的）。
+       给一个短窗口：这段时间里以"当前顶边"为准，不反推。 */
+    w.__pinTopUntil = Date.now() + 1200;
     const idleY = Math.round(b.y + (w.__top || 0) - (w.__topMin || 0));
     patchCardState({ x: b.x, y: idleY });
     bootLog(`drag end bounds=${b.x},${b.y} hwndPos=${st.ox},${st.oy} moving=${st.moving}`);
@@ -1127,6 +1146,19 @@ async function buildMenu() {
       click: (item) => { toggleDesktopLayer(item.checked); },
     },
     {
+      label: "真透明（失去点击穿透）",
+      type: "checkbox",
+      checked: readCardState().noRegion === true,
+      click: (item) => {
+        patchCardState({ noRegion: !!item.checked });
+        /* 立刻重算区域，不用重启 */
+        try {
+          const r = win.webContents.executeJavaScript("JSON.stringify((window.__rows||[]).map(e=>{const b=e.getBoundingClientRect();return {x:b.x,y:b.y,w:b.width,h:b.height}}))");
+          r.then((txt) => applyRegion(win, JSON.parse(txt))).catch(() => applyRegion(win, null));
+        } catch (e) { applyRegion(win, null); }
+      },
+    },
+    {
       label: "窗口置顶（会脱离桌面层）",
       type: "checkbox",
       checked: onTop,
@@ -1304,6 +1336,12 @@ app.whenReady().then(() => {
     w.__topMin = topMin;
 
     let y = Math.round(w.__rowsY - pad - top);
+    if (w.__pinTopUntil && Date.now() < w.__pinTopUntil) {
+      /* 拖动刚结束：顶边保持不动，锚点反过来跟着当前顶边重算，
+         这样"收起"只会让卡片从底部缩，不会整体往下跳。 */
+      y = b.y;
+      w.__rowsY = y + pad + top;
+    }
     y = Math.max(wa.y + 8, Math.min(y, wa.y + wa.height - H - 8));
 
     /* 正在拖动时，别处（悬停展开/收起、贴底顶回）改了 y：把拖动的基准点一起平移，
