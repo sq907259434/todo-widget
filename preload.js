@@ -28,6 +28,7 @@ contextBridge.exposeInMainWorld("wgt", {
   /* 按内容高度改窗口。传 {h, top, topMin}：
      h=卡片高度，top=待办区上沿距卡片顶的距离，topMin=收起时的 top。
      主进程靠 top 的变化反推窗口该往上挪多少，让条目在屏幕上不动。 */
+  dbg: (m) => ipcRenderer.send("wgt:dbg", String(m)),
   setCardHeight: (msg) => ipcRenderer.invoke("wgt:set-card-height", msg),
   /* 窗口形状：报"真正画了东西的矩形"（CSS px，相对窗口客户区）。
      桌面层里窗口是 Progman 的子窗口，透明像素能透壁纸、透不出图标层，

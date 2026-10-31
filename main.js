@@ -1269,6 +1269,11 @@ app.whenReady().then(() => {
     w.__dragTimer = setTimeout(() => { if (!w.isDestroyed()) w.__dragFrom = null; }, 1200);
   });
 
+  ipcMain.on("wgt:dbg", (e, m) => {
+    try { fs.appendFileSync(path.join(app.getPath("userData"), "win-events.log"),
+      new Date().toISOString() + " PG " + m + "\n"); } catch (er) {}
+  });
+
   ipcMain.on("wgt:drag-end", (e) => {
     const w = senderWin(e);
     if (!w || w.isDestroyed()) return;
@@ -1332,11 +1337,17 @@ app.whenReady().then(() => {
     const pad = w.__pad || 0;
     const H = cardH + pad * 2;
 
-    if (w.__rowsY == null) w.__rowsY = b.y + pad + top;
+    /* ★ 不依赖历史锚点：每次改高度，先算出"任务条此刻在屏幕上的位置"，
+       再反推新窗口的 y，让任务条原地不动。
+       旧写法用 w.__rowsY（拖动时按 topMin 量算出来的），一旦拖动期间卡片是
+       展开态，这个值就和真实行位置差了 63px，松手展开时任务条就往下掉。
+       用 b.y + 旧 top 现算，任何时序都不会错。 */
+    const rowsBefore = b.y + (w.__pad || 0) + (w.__top || 0);
+    w.__rowsY = rowsBefore;
     w.__top = top;
     w.__topMin = topMin;
 
-    let y = Math.round(w.__rowsY - pad - top);
+    let y = Math.round(rowsBefore - pad - top);
     /* ★ 这里曾经有个"钉住顶边"的补丁（拖动后 1.2s 内强制 y 不变）。
        它和本卡的锚点设计正好相反：松手后卡片要展开 65px（顶栏22+输入条43），
        正确行为是"窗口向上长、任务条原地不动"；钉住顶边就把那 65px 全推到
@@ -1348,6 +1359,12 @@ app.whenReady().then(() => {
        基准跟窗口一起走，画面才连续。 */
     if (w.__drag && y !== b.y) w.__drag.oy += (y - b.y);
 
+    try {
+      if (H !== b.height || y !== b.y) {
+        fs.appendFileSync(path.join(app.getPath("userData"), "win-events.log"),
+          new Date().toISOString() + ` CH h:${b.height}->${H} y:${b.y}->${y} rowsY=${Math.round(w.__rowsY)} top=${top} topMin=${topMin}\n`);
+      }
+    } catch (e) {}
     if (H === b.height && y === b.y) return true;
 
     w.__autoY = y;      /* 记下这次是我们自己改的 y，moved 事件据此放行 */

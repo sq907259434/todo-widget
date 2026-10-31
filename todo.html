@@ -914,6 +914,9 @@ function syncHeight(now) {
     const top = topOffset();
     if (h === lastH && top === lastTop) return;
     lastH = h; lastTop = top;
+    if (window.wgt && window.wgt.dbg) {
+      window.wgt.dbg(`SEND h=${h} top=${top} topMin=${idleTop()} full=${document.getElementById("card").classList.contains("full")} drag=${document.body.classList.contains("dragging")}`);
+    }
     if (window.wgt && window.wgt.setCardHeight) {
       window.wgt.setCardHeight({
         h: h,
@@ -1229,6 +1232,7 @@ function endDrag() {
   document.body.classList.remove("drag-lock");
   renderLook();
   heightLocked = false;
+  if (window.wgt && window.wgt.dbg) window.wgt.dbg("DRAG_END(page)");
   syncHeight(true);
   if (window.wgt && window.wgt.dragEnd) window.wgt.dragEnd();
 }
