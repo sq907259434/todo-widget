@@ -487,7 +487,12 @@ function dragBegin(w, btn) {
        卡片、set-card-height 拿旧锚点反推 y，卡片会"啪"地弹回原位（用户报的跳变）。
        每一帧都同步，是因为页面 mouseup 可能比主进程的按键轮询更早到。
        注意单位：ny 是物理像素，__rowsY 是 DIP。 */
-    w.__rowsY = ny / (st.scale || 1) + (w.__pad || 0) + (w.__top || 0);
+    /* ★ 用"收起态"的 top（__topMin）算锚点，不是当前 top。
+       拖动时卡片是"完全体"（展开了），当前 top 比收起态大；
+       若拿它算锚点，松手后鼠标移开、卡片收起时会按收起态的 top 反推顶边，
+       整张卡就往下掉 (top - topMin) —— 用户报的"完全体消失后位置挪了"。
+       用 __topMin 算，收起时 y 正好回到松手那一刻的位置，展开时仍然往上长。 */
+    w.__rowsY = ny / (st.scale || 1) + (w.__pad || 0) + (w.__topMin != null ? w.__topMin : (w.__top || 0));
   }, 8);
 }
 
@@ -517,7 +522,7 @@ function dragStop(w, persist) {
   if (persist && w && !w.isDestroyed()) {
     const b = w.getBounds();
     /* 收尾再校一次锚点：拖动最后一帧可能刚好没被 tick 覆盖到（按钮松开先于定时器） */
-    w.__rowsY = b.y + (w.__pad || 0) + (w.__top || 0);
+    w.__rowsY = b.y + (w.__pad || 0) + (w.__topMin != null ? w.__topMin : (w.__top || 0));
     /* 刚松手时页面会从"完全体"收起：收起后首行在卡片里的偏移变了，
        set-card-height 用旧锚点反推顶边，卡片就会往下跳一截（用户报的）。
        给一个短窗口：这段时间里以"当前顶边"为准，不反推。 */
