@@ -523,10 +523,6 @@ function dragStop(w, persist) {
     const b = w.getBounds();
     /* 收尾再校一次锚点：拖动最后一帧可能刚好没被 tick 覆盖到（按钮松开先于定时器） */
     w.__rowsY = b.y + (w.__pad || 0) + (w.__topMin != null ? w.__topMin : (w.__top || 0));
-    /* 刚松手时页面会从"完全体"收起：收起后首行在卡片里的偏移变了，
-       set-card-height 用旧锚点反推顶边，卡片就会往下跳一截（用户报的）。
-       给一个短窗口：这段时间里以"当前顶边"为准，不反推。 */
-    w.__pinTopUntil = Date.now() + 1200;
     const idleY = Math.round(b.y + (w.__top || 0) - (w.__topMin || 0));
     patchCardState({ x: b.x, y: idleY });
     bootLog(`drag end bounds=${b.x},${b.y} hwndPos=${st.ox},${st.oy} moving=${st.moving}`);
@@ -1341,12 +1337,10 @@ app.whenReady().then(() => {
     w.__topMin = topMin;
 
     let y = Math.round(w.__rowsY - pad - top);
-    if (w.__pinTopUntil && Date.now() < w.__pinTopUntil) {
-      /* 拖动刚结束：顶边保持不动，锚点反过来跟着当前顶边重算，
-         这样"收起"只会让卡片从底部缩，不会整体往下跳。 */
-      y = b.y;
-      w.__rowsY = y + pad + top;
-    }
+    /* ★ 这里曾经有个"钉住顶边"的补丁（拖动后 1.2s 内强制 y 不变）。
+       它和本卡的锚点设计正好相反：松手后卡片要展开 65px（顶栏22+输入条43），
+       正确行为是"窗口向上长、任务条原地不动"；钉住顶边就把那 65px 全推到
+       任务条身上 → 用户看到的"变回卡片时任务条往下跳"。已移除。 */
     y = Math.max(wa.y + 8, Math.min(y, wa.y + wa.height - H - 8));
 
     /* 正在拖动时，别处（悬停展开/收起、贴底顶回）改了 y：把拖动的基准点一起平移，
