@@ -1274,7 +1274,11 @@ window.addEventListener("mousemove", (e) => {
   if (Math.abs(dx) < 3 && Math.abs(dy) < 3) return;
   winDrag.moved = true;
   lookDrag = true;
-  renderLook();
+  renderLook();           /* 摘皮肤：顶栏+输入条 display:none，布局瞬间少 63px */
+  /* ★ 摘完皮肤必须让窗口立刻跟着缩一次，否则那 63px 只能由任务条承担 ——
+     表现就是"一按住拖动，任务条往上跳一截"。缩完再上锁，拖动期间不再改。 */
+  heightLocked = false;
+  syncHeight(true);
   heightLocked = true;    /* 拖动期间别再自己改高度/位置，否则和鼠标抢窗口 */
 });
 
